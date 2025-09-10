@@ -1,12 +1,12 @@
-const express = require('express');
-const session = require('express-session');
-const passport = require('passport');
-const { Strategy: LocalStrategy } = require('passport-local');
-const { scrypt, randomBytes, timingSafeEqual } = require('crypto');
-const { promisify } = require('util');
-const QRCode = require('qrcode');
-const sharp = require('sharp');
-const { randomUUID } = require('crypto');
+import express from 'express';
+import session from 'express-session';
+import passport from 'passport';
+import { Strategy as LocalStrategy } from 'passport-local';
+import { scrypt, randomBytes, timingSafeEqual, randomUUID } from 'crypto';
+import { promisify } from 'util';
+import QRCode from 'qrcode';
+import sharp from 'sharp';
+import createMemoryStore from 'memorystore';
 
 const scryptAsync = promisify(scrypt);
 
@@ -79,11 +79,17 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Session configuration for serverless
+// Session configuration for serverless - using MemoryStore for simplicity
+// In production, you'd want to use a persistent store like Redis
+const MemoryStore = createMemoryStore(session);
+
 app.use(session({
   secret: process.env.SESSION_SECRET || 'your-secret-key-here-change-in-production',
   resave: false,
   saveUninitialized: false,
+  store: new MemoryStore({
+    checkPeriod: 86400000 // prune expired entries every 24h
+  }),
   cookie: {
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
     secure: process.env.NODE_ENV === 'production',
@@ -348,4 +354,4 @@ app.use((err, req, res, next) => {
   res.status(status).json({ message });
 });
 
-module.exports = app;
+export default app;
