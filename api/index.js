@@ -6,16 +6,28 @@ import { scrypt, randomBytes, timingSafeEqual, randomUUID } from 'crypto';
 import { promisify } from 'util';
 import QRCode from 'qrcode';
 import sharp from 'sharp';
-import createMemoryStore from 'memorystore';
 
 const scryptAsync = promisify(scrypt);
 
-// In-memory storage for serverless (note: this will reset on each deployment)
-// For production, you'd want to use a database like Supabase, PlanetScale, or Neon
-const users = new Map();
-const qrCodes = new Map();
-const shortCodeToQrId = new Map();
-const sessions = new Map();
+// Global storage for serverless (shared across function invocations)
+// This will persist during the lifetime of the serverless function instance
+let users, qrCodes, shortCodeToQrId, sessions;
+
+// Initialize storage if not already initialized
+if (!global.appStorage) {
+  global.appStorage = {
+    users: new Map(),
+    qrCodes: new Map(), 
+    shortCodeToQrId: new Map(),
+    sessions: new Map()
+  };
+}
+
+// Use global storage
+users = global.appStorage.users;
+qrCodes = global.appStorage.qrCodes;
+shortCodeToQrId = global.appStorage.shortCodeToQrId;
+sessions = global.appStorage.sessions;
 
 // Password hashing functions
 async function hashPassword(password) {
@@ -79,21 +91,17 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Session configuration for serverless - using MemoryStore for simplicity
-// In production, you'd want to use a persistent store like Redis
-const MemoryStore = createMemoryStore(session);
-
+// Session configuration for serverless
+// Using default memory store with adjusted settings for serverless
 app.use(session({
   secret: process.env.SESSION_SECRET || 'your-secret-key-here-change-in-production',
   resave: false,
   saveUninitialized: false,
-  store: new MemoryStore({
-    checkPeriod: 86400000 // prune expired entries every 24h
-  }),
   cookie: {
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
   },
 }));
 
