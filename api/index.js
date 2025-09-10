@@ -1,7 +1,6 @@
 import express from 'express';
-import session from 'express-session';
-import passport from 'passport';
-import { Strategy as LocalStrategy } from 'passport-local';
+import jwt from 'jsonwebtoken';
+import cookieParser from 'cookie-parser';
 import { scrypt, randomBytes, timingSafeEqual, randomUUID } from 'crypto';
 import { promisify } from 'util';
 import QRCode from 'qrcode';
@@ -90,54 +89,41 @@ const app = express();
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use(cookieParser());
 
-// Session configuration for serverless
-// Using default memory store with adjusted settings for serverless
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'your-secret-key-here-change-in-production',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    secure: process.env.NODE_ENV === 'production',
+// JWT utilities
+const JWT_SECRET = process.env.SESSION_SECRET || 'your-secret-key-here-change-in-production';
+const TOKEN_COOKIE = 'qr_token';
+
+function signUser(user) {
+  return jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+}
+
+function setAuthCookie(res, token) {
+  res.cookie(TOKEN_COOKIE, token, {
     httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-  },
-}));
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+}
 
-app.use(passport.initialize());
-app.use(passport.session());
-
-// Passport configuration
-passport.use(
-  new LocalStrategy(async (username, password, done) => {
-    try {
-      const user = Array.from(users.values()).find(u => u.username === username);
-      if (!user || !(await comparePasswords(password, user.password))) {
-        return done(null, false);
-      }
-      return done(null, user);
-    } catch (error) {
-      return done(error);
-    }
-  })
-);
-
-passport.serializeUser((user, done) => done(null, user.id));
-passport.deserializeUser(async (id, done) => {
+function getUserFromReq(req) {
   try {
-    const user = users.get(id);
-    done(null, user);
-  } catch (error) {
-    done(error);
+    const token = req.cookies?.[TOKEN_COOKIE];
+    if (!token) return null;
+    const payload = jwt.verify(token, JWT_SECRET);
+    const user = users.get(payload.id);
+    return user || null;
+  } catch {
+    return null;
   }
-});
+}
 
-// Auth middleware
 function requireAuth(req, res, next) {
-  if (!req.isAuthenticated()) {
-    return res.status(401).json({ message: 'Authentication required' });
-  }
+  const user = getUserFromReq(req);
+  if (!user) return res.status(401).json({ message: 'Authentication required' });
+  req.user = user;
   next();
 }
 
@@ -157,38 +143,38 @@ app.post('/api/register', async (req, res) => {
     };
     users.set(id, user);
 
-    req.login(user, (err) => {
-      if (err) return res.status(500).json({ message: 'Login failed' });
-      res.status(201).json({ id: user.id, username: user.username });
-    });
+    const token = signUser(user);
+    setAuthCookie(res, token);
+    res.status(201).json({ id: user.id, username: user.username });
   } catch (error) {
     res.status(400).json({ message: 'Registration failed' });
   }
 });
 
-app.post('/api/login', (req, res, next) => {
-  passport.authenticate('local', (err, user, info) => {
-    if (err) return next(err);
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid username or password' });
-    }
-    req.login(user, (err) => {
-      if (err) return next(err);
-      res.status(200).json({ id: user.id, username: user.username });
-    });
-  })(req, res, next);
+app.post('/api/login', async (req, res) => {
+  const { username, password } = req.body || {};
+  const user = Array.from(users.values()).find(u => u.username === username);
+  if (!user || !(await comparePasswords(password, user.password))) {
+    return res.status(401).json({ message: 'Invalid username or password' });
+  }
+  const token = signUser(user);
+  setAuthCookie(res, token);
+  res.status(200).json({ id: user.id, username: user.username });
 });
 
-app.post('/api/logout', (req, res, next) => {
-  req.logout((err) => {
-    if (err) return next(err);
-    res.sendStatus(200);
+app.post('/api/logout', (req, res) => {
+  res.clearCookie(TOKEN_COOKIE, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
   });
+  res.sendStatus(200);
 });
 
 app.get('/api/user', (req, res) => {
-  if (!req.isAuthenticated()) return res.sendStatus(401);
-  res.json({ id: req.user.id, username: req.user.username });
+  const user = getUserFromReq(req);
+  if (!user) return res.sendStatus(401);
+  res.json({ id: user.id, username: user.username });
 });
 
 // QR Code routes
