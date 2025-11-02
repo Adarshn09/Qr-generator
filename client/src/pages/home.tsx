@@ -35,7 +35,9 @@ export default function HomePage() {
           <nav className="hidden md:flex items-center space-x-8">
             <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">Features</a>
             <a href="#pricing" className="text-muted-foreground hover:text-foreground transition-colors">Pricing</a>
-            <a href="#about" className="text-muted-foreground hover:text-foreground transition-colors">About</a>
+             <Link href="/about">
+              <a className="text-muted-foreground hover:text-foreground transition-colors">About</a>
+            </Link>
           </nav>
           
           <Link href="/auth">
