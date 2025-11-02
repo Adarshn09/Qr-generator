@@ -93,3 +93,4 @@ Preferred communication style: Simple, everyday language.
 ### Development and Deployment
 - **Replit Integration**: Cartographer plugin and runtime error overlay for Replit environment
 - **Environment Configuration**: Environment-based configuration for database and development settings
+<!-- npx cross-env NODE_ENV=development tsx server/index.ts -->
