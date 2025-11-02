@@ -245,10 +245,10 @@ export default function AuthPage() {
         </div>
 
         {/* Right Column - Hero Section */}
-        <div className="hidden lg:block">
+        <div className="hidden lg:block mt-52">
           <div className="text-center">
-            <div className="bg-white rounded-lg shadow-xl p-8 mb-8">
-              <QrCode className="w-24 h-24 text-primary mx-auto mb-6" />
+            <div className="bg-white rounded-lg shadow-xl p-8 mb-8 ">
+              <QrCode className="w-24 h-24 text-primary mx-auto mb-6 " />
               <h2 className="text-3xl font-bold text-gray-900 mb-4">
                 Professional QR Code Management
               </h2>
